@@ -1,0 +1,124 @@
+{
+  "bloques": [
+    {
+      "id": "b1",
+      "tipo": "clase",
+      "nombre": "Base de Datos II · teoría",
+      "fuente": "HORARIO",
+      "dia": "lun",
+      "inicio": "14:00",
+      "fin": "16:00"
+    },
+    {
+      "id": "b2",
+      "tipo": "clase",
+      "nombre": "Relaciones con los Clientes (CRM) · teoría",
+      "fuente": "HORARIO",
+      "dia": "lun",
+      "inicio": "16:00",
+      "fin": "18:00"
+    },
+    {
+      "id": "b3",
+      "tipo": "clase",
+      "nombre": "Sistemas de Información II · laboratorio",
+      "fuente": "HORARIO",
+      "dia": "mar",
+      "inicio": "07:00",
+      "fin": "09:00"
+    },
+    {
+      "id": "b4",
+      "tipo": "clase",
+      "nombre": "Aplicaciones Distribuidas I · teoría",
+      "fuente": "HORARIO",
+      "dia": "mar",
+      "inicio": "11:00",
+      "fin": "13:00"
+    },
+    {
+      "id": "b5",
+      "tipo": "clase",
+      "nombre": "Relaciones con los Clientes (CRM) · laboratorio",
+      "fuente": "HORARIO",
+      "dia": "mié",
+      "inicio": "07:00",
+      "fin": "09:00"
+    },
+    {
+      "id": "b6",
+      "tipo": "clase",
+      "nombre": "Sistemas de Información II · teoría",
+      "fuente": "HORARIO",
+      "dia": "mié",
+      "inicio": "11:00",
+      "fin": "13:00"
+    },
+    {
+      "id": "b7",
+      "tipo": "clase",
+      "nombre": "Base de Datos II · laboratorio",
+      "fuente": "HORARIO",
+      "dia": "mié",
+      "inicio": "14:00",
+      "fin": "18:00"
+    },
+    {
+      "id": "b8",
+      "tipo": "clase",
+      "nombre": "Arquitectura de Software Empresarial · laboratorio",
+      "fuente": "HORARIO",
+      "dia": "jue",
+      "inicio": "14:00",
+      "fin": "18:00"
+    },
+    {
+      "id": "b9",
+      "tipo": "clase",
+      "nombre": "Arquitectura de Software Empresarial · teoría",
+      "fuente": "HORARIO",
+      "dia": "vie",
+      "inicio": "07:00",
+      "fin": "09:00"
+    },
+    {
+      "id": "b10",
+      "tipo": "clase",
+      "nombre": "Aplicaciones Distribuidas I · laboratorio",
+      "fuente": "HORARIO",
+      "dia": "vie",
+      "inicio": "14:00",
+      "fin": "18:00"
+    },
+    {
+      "id": "b11",
+      "tipo": "clase",
+      "nombre": "Comunicación de Datos · teoría",
+      "fuente": "HORARIO",
+      "dia": "sáb",
+      "inicio": "07:00",
+      "fin": "09:00"
+    },
+    {
+      "id": "b12",
+      "tipo": "clase",
+      "nombre": "Comunicación de Datos · laboratorio",
+      "fuente": "HORARIO",
+      "dia": "sáb",
+      "inicio": "09:00",
+      "fin": "13:00"
+    }
+  ],
+  "config": {
+    "fuentes": [
+      "03-Universidad/2026-II/Pendientes académicos - octubre 2026.md",
+      "06-Planificacion/Plan del mes.md",
+      "06-Planificacion/Objetivos del año.md"
+    ],
+    "avisoMinutos": 15,
+    "recordatorios": [
+      "06:30",
+      "21:00"
+    ]
+  }
+}
