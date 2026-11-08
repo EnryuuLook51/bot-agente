@@ -107,6 +107,132 @@
       "dia": "sáb",
       "inicio": "09:00",
       "fin": "13:00"
+    },
+    {
+      "id": "b13",
+      "tipo": "traslado",
+      "nombre": "🚍 Ida a la universidad",
+      "fuente": "HORARIO",
+      "dia": "lun",
+      "inicio": "13:00",
+      "fin": "14:00"
+    },
+    {
+      "id": "b14",
+      "tipo": "traslado",
+      "nombre": "🚍 Vuelta a casa",
+      "fuente": "HORARIO",
+      "dia": "lun",
+      "inicio": "18:00",
+      "fin": "19:00"
+    },
+    {
+      "id": "b15",
+      "tipo": "traslado",
+      "nombre": "🚍 Ida a la universidad",
+      "fuente": "HORARIO",
+      "dia": "mar",
+      "inicio": "06:00",
+      "fin": "07:00"
+    },
+    {
+      "id": "b16",
+      "tipo": "traslado",
+      "nombre": "🚍 Vuelta a casa",
+      "fuente": "HORARIO",
+      "dia": "mar",
+      "inicio": "13:00",
+      "fin": "14:00"
+    },
+    {
+      "id": "b17",
+      "tipo": "traslado",
+      "nombre": "🚍 Ida a la universidad",
+      "fuente": "HORARIO",
+      "dia": "mié",
+      "inicio": "06:00",
+      "fin": "07:00"
+    },
+    {
+      "id": "b18",
+      "tipo": "traslado",
+      "nombre": "🚍 Vuelta a casa",
+      "fuente": "HORARIO",
+      "dia": "mié",
+      "inicio": "18:00",
+      "fin": "19:00"
+    },
+    {
+      "id": "b19",
+      "tipo": "traslado",
+      "nombre": "🚍 Ida a la universidad",
+      "fuente": "HORARIO",
+      "dia": "jue",
+      "inicio": "13:00",
+      "fin": "14:00"
+    },
+    {
+      "id": "b20",
+      "tipo": "traslado",
+      "nombre": "🚍 Vuelta a casa",
+      "fuente": "HORARIO",
+      "dia": "jue",
+      "inicio": "18:00",
+      "fin": "19:00"
+    },
+    {
+      "id": "b21",
+      "tipo": "traslado",
+      "nombre": "🚍 Ida a la universidad",
+      "fuente": "HORARIO",
+      "dia": "vie",
+      "inicio": "06:00",
+      "fin": "07:00"
+    },
+    {
+      "id": "b22",
+      "tipo": "traslado",
+      "nombre": "🚍 Vuelta a casa",
+      "fuente": "HORARIO",
+      "dia": "vie",
+      "inicio": "09:00",
+      "fin": "10:00"
+    },
+    {
+      "id": "b23",
+      "tipo": "traslado",
+      "nombre": "🚍 Ida a la universidad",
+      "fuente": "HORARIO",
+      "dia": "vie",
+      "inicio": "13:00",
+      "fin": "14:00"
+    },
+    {
+      "id": "b24",
+      "tipo": "traslado",
+      "nombre": "🚍 Vuelta a casa",
+      "fuente": "HORARIO",
+      "dia": "vie",
+      "inicio": "18:00",
+      "fin": "19:00"
+    },
+    {
+      "id": "b25",
+      "tipo": "traslado",
+      "nombre": "🚍 Ida a la universidad",
+      "fuente": "HORARIO",
+      "dia": "sáb",
+      "inicio": "06:00",
+      "fin": "07:00"
+    },
+    {
+      "id": "b26",
+      "tipo": "traslado",
+      "nombre": "🚍 Vuelta a casa",
+      "fuente": "HORARIO",
+      "dia": "sáb",
+      "inicio": "13:00",
+      "fin": "14:00"
     }
   ],
   "config": {
