@@ -214,11 +214,16 @@ func TestExtraerTurnoOrdenDescendente(t *testing.T) {
 		{"id":"msg_agenda_1","type":"user","text":"hola"},
 		{"id":"msg_0","type":"assistant","content":[{"type":"text","text":"turno viejo"}]}
 	]`)
-	texto, listo := extraerTurno(bruto, "msg_agenda_1")
-	if !listo || texto != "primera\nsegunda" {
+	texto, listo, err := extraerTurno(bruto, "msg_agenda_1")
+	if err != nil || !listo || texto != "primera\nsegunda" {
 		t.Fatalf("respuesta mal armada: %q %v", texto, listo)
 	}
-	if _, listo := extraerTurno([]byte(`[{"id":"msg_agenda_1","type":"user"}]`), "msg_agenda_1"); listo {
+	if _, listo, _ := extraerTurno([]byte(`[{"id":"msg_agenda_1","type":"user"}]`), "msg_agenda_1"); listo {
 		t.Fatal("sin respuesta todavía no debe estar listo")
+	}
+	// Formato real de un fallo del proveedor: finish "error", sin contenido.
+	fallo := []byte(`[{"id":"msg_9","type":"assistant","content":[],"finish":"error","error":{"message":"Model is unavailable."}},{"id":"msg_agenda_1","type":"user"}]`)
+	if _, _, err := extraerTurno(fallo, "msg_agenda_1"); err == nil {
+		t.Fatal("debió detectar el error del modelo")
 	}
 }

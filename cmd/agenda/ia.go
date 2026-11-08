@@ -137,7 +137,11 @@ func (c *clienteIA) turno(session, identificador, texto string) (string, error) 
 		if !ok {
 			continue
 		}
-		if textoRespuesta, listo := extraerTurno(bruto, identificador); listo {
+		textoRespuesta, listo, err := extraerTurno(bruto, identificador)
+		if err != nil {
+			return "", err
+		}
+		if listo {
 			return textoRespuesta, nil
 		}
 	}
@@ -147,11 +151,12 @@ func (c *clienteIA) turno(session, identificador, texto string) (string, error) 
 // extraerTurno busca la respuesta al turno del usuario. La página viene del
 // mensaje más reciente al más antiguo, así que la respuesta del asistente está
 // ANTES del turno en la lista: se juntan esos mensajes y se invierten.
-// Devuelve listo=false si el turno aún no aparece o no hay texto todavía.
-func extraerTurno(bruto json.RawMessage, identificador string) (string, bool) {
+// Devuelve listo=false si el turno aún no aparece o no hay texto todavía, y
+// un error público si el modelo terminó con finish:"error".
+func extraerTurno(bruto json.RawMessage, identificador string) (string, bool, error) {
 	var mensajes []apiMensaje
 	if err := json.Unmarshal(bruto, &mensajes); err != nil {
-		return "", false
+		return "", false, nil
 	}
 	var bloques []string
 	encontrado := false
@@ -163,6 +168,9 @@ func extraerTurno(bruto json.RawMessage, identificador string) (string, bool) {
 		if m.Tipo != "assistant" {
 			continue
 		}
+		if m.Fin == "error" {
+			return "", false, BridgeError("el modelo falló al responder; reintenta en unos minutos")
+		}
 		for i := len(m.Contenido) - 1; i >= 0; i-- {
 			if c := m.Contenido[i]; c.Tipo == "text" && strings.TrimSpace(c.Texto) != "" {
 				bloques = append(bloques, c.Texto)
@@ -170,12 +178,12 @@ func extraerTurno(bruto json.RawMessage, identificador string) (string, bool) {
 		}
 	}
 	if !encontrado || len(bloques) == 0 {
-		return "", false
+		return "", false, nil
 	}
 	for i, j := 0, len(bloques)-1; i < j; i, j = i+1, j-1 {
 		bloques[i], bloques[j] = bloques[j], bloques[i]
 	}
-	return strings.Join(bloques, "\n"), true
+	return strings.Join(bloques, "\n"), true, nil
 }
 
 // apiMensaje replica el formato de mensajes de la API de OpenCode.
@@ -183,6 +191,7 @@ type apiMensaje struct {
 	ID        string         `json:"id"`
 	Tipo      string         `json:"type"`
 	Contenido []apiContenido `json:"content"`
+	Fin       string         `json:"finish"` // "error" si el proveedor falló
 }
 
 type apiContenido struct {

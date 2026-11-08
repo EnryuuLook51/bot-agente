@@ -42,7 +42,7 @@ provoca divergencias en el sync de Git.
 
 ```json
 {
-  "fuentes": ["03-Universidad/2026-II/Pendientes académicos - octubre 2026.md"],
+  "fuentes": ["03-Universidad/2026-II/Pendientes académicos.md"],
   "avisoMinutos": 15,
   "recordatorios": ["06:30", "21:00"]
 }
