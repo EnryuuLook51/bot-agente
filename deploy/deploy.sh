@@ -1,5 +1,5 @@
 #!/bin/sh
-# Despliegue del bot de agenda (Go + OpenCode bajo QEMU) en el servidor ASUS.
+# Despliegue del bot de agenda (Go, IA vía Groq) en el servidor ASUS.
 # Datos del bot en $DATOS (fuera de la bóveda); la bóveda se monta solo lectura.
 # Uso: ./deploy.sh [usuario@host]    (por defecto asus-tail)
 # Convenciones del MANUAL: servicio en /opt/apps/services/bot-agenda/,
@@ -10,7 +10,6 @@ DESTINO="${1:-asus-tail}"
 SERVICIO="/opt/apps/services/bot-agenda"
 VAULT="/opt/apps/data/obsidian-vault"
 DATOS="/opt/apps/data/bot-agenda"
-AUTH="/home/franco/.local/share/opencode/auth.json"
 ORIGEN="$(cd "$(dirname "$0")/.." && pwd)"
 
 # 1. Escenario limpio: solo lo que la imagen necesita.
@@ -39,8 +38,8 @@ if [ ! -f '$VAULT/Inicio.md' ]; then
     echo \"FALTA la bóveda en $VAULT (Inicio.md); revisa el montaje.\" >&2
     exit 1
 fi
-if [ ! -f '$AUTH' ]; then
-    echo \"FALTA '$AUTH'; autentica OpenCode en el servidor primero (opencode auth login).\" >&2
+if ! sudo -n grep -q '^GROQ_API_KEY=.' agent.env; then
+    echo 'FALTA GROQ_API_KEY en agent.env; sin ella la IA queda apagada.' >&2
     exit 1
 fi
 sudo -n mkdir -p '$DATOS'

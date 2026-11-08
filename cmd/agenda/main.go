@@ -1,9 +1,8 @@
 package main
 
-// Bot de agenda: un solo binario que arranca el servidor OpenCode supervisado
-// (para las funciones IA), se conecta a Telegram y corre tres hilos: el loop
-// de updates (comandos, botones, texto libre), el ticker (avisos y
-// recordatorios) y el worker que ejecuta los turnos de IA de a uno.
+// Bot de agenda: un solo binario que se conecta a Telegram y corre tres hilos:
+// el loop de updates (comandos, botones, texto libre), el ticker (avisos y
+// recordatorios) y el worker que ejecuta los turnos de IA (Groq) de a uno.
 //
 // Datos (DATOS_DIR): horario.json, tareas.json, registro.jsonl, estado.json,
 // respaldos/. La bóveda (VAULT) solo se lee, para /sugerir.
@@ -44,9 +43,7 @@ type configuracionBot struct {
 	owner     int64
 	vault     string
 	dirDatos  string
-	opcBin    string
-	opcQemu   string
-	opcBase   string
+	claveIA   string
 	modelo    string
 	comprobar bool
 }
@@ -57,10 +54,7 @@ func principal() int {
 	flag.StringVar(&conf.vault, "vault", os.Getenv("VAULT"), "bóveda, solo lectura (o env VAULT)")
 	flag.StringVar(&conf.dirDatos, "datos", envOR("DATOS_DIR", "/data"), "directorio de datos (o env DATOS_DIR)")
 	flag.Int64Var(&conf.owner, "owner", 0, "id de Telegram del dueño (o env TELEGRAM_OWNER_ID)")
-	flag.StringVar(&conf.opcBin, "opc-bin", envOR("OPC_BIN", "/root/.opencode/bin/opencode"), "binario opencode")
-	flag.StringVar(&conf.opcQemu, "opc-qemu", os.Getenv("OPC_QEMU"), "ruta de qemu-x86_64-static (vacío: directo)")
-	flag.StringVar(&conf.opcBase, "opc-base", envOR("OPC_BASE", "http://127.0.0.1:4096"), "base del opencode serve")
-	flag.StringVar(&conf.modelo, "modelo", envOR("MODELO", "glm-5.3-flash-free"), "modelo del proveedor opencode")
+	flag.StringVar(&conf.modelo, "modelo", envOR("MODELO", "openai/gpt-oss-120b"), "modelo de Groq")
 	flag.BoolVar(&conf.comprobar, "check", false, "valida configuración y datos, sin arrancar")
 	flag.Parse()
 	if conf.owner == 0 {
@@ -68,6 +62,7 @@ func principal() int {
 			conf.owner = valor
 		}
 	}
+	conf.claveIA = os.Getenv("GROQ_API_KEY") // solo por entorno: nunca en la línea de comandos
 	if flag.Arg(0) == "check" {
 		conf.comprobar = true // `agenda check` == --check (para compose run)
 	}
@@ -84,15 +79,6 @@ func principal() int {
 		return 1
 	}
 
-	// Servidor OpenCode: tarda minutos en arrancar bajo qemu; mientras tanto
-	// los comandos sin IA ya funcionan.
-	servidor := nuevoServidor(conf.opcBin, conf.opcQemu, conf.opcBase)
-	go func() {
-		if err := servidor.arrancar(); err != nil {
-			fmt.Fprintln(os.Stderr, "servidor OpenCode:", err)
-		}
-	}()
-
 	reg := nuevoRegistro(conf.dirDatos)
 	relay, err := newTelegram(conf.token, conf.owner, reg)
 	if err != nil {
@@ -108,8 +94,7 @@ func principal() int {
 		datos:    datos,
 		relay:    relay,
 		registro: reg,
-		cliente:  nuevoClienteIA(conf.opcBase, conf.vault, conf.modelo),
-		servidor: servidor,
+		cliente:  nuevoClienteIA(conf.claveIA, conf.modelo),
 		estado:   cargarEstado(conf.dirDatos),
 		trabajo:  make(chan func(), 8),
 	}
@@ -119,7 +104,6 @@ func principal() int {
 	signal.Notify(detener, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-detener
-		servidor.detener()
 		os.Exit(0)
 	}()
 
@@ -154,12 +138,11 @@ type botAgenda struct {
 	relay    *Relay
 	registro *registro
 	cliente  *clienteIA
-	servidor *servidorSupervisado
 	estado   *estadoBot
 	trabajo  chan func() // turnos IA en serie
 }
 
-// worker ejecuta los turnos IA de a uno (OpenCode bajo qemu no aguanta paralelo).
+// worker ejecuta los turnos IA de a uno (respeta el límite por minuto de Groq).
 func (b *botAgenda) worker() {
 	for tarea := range b.trabajo {
 		tarea()
@@ -168,9 +151,8 @@ func (b *botAgenda) worker() {
 
 // encolarIA manda un turno de IA al worker sin bloquear el loop de Telegram.
 func (b *botAgenda) encolarIA(tarea func()) {
-	if !b.servidor.disponible() {
-		_ = b.relay.send("La IA todavía está arrancando (tarda unos minutos tras reiniciar). " +
-			"/hoy y /semana ya funcionan; reintenta en un rato.")
+	if b.conf.claveIA == "" {
+		_ = b.relay.send("La IA no está configurada (falta GROQ_API_KEY). /hoy y /semana funcionan igual.")
 		return
 	}
 	select {
@@ -386,6 +368,7 @@ func comprobar(conf configuracionBot, datos *almacen) int {
 	}
 	revisar("token", conf.token != "", "vacío")
 	revisar("owner", conf.owner > 0, "vacío")
+	revisar("groq", conf.claveIA != "", "falta GROQ_API_KEY (la IA quedará apagada)")
 	revisar("vault", directorioExiste(conf.vault), "no existe")
 	revisar("datos", os.MkdirAll(conf.dirDatos, 0o700) == nil, "no se pudo crear")
 	agenda, err := datos.cargar()

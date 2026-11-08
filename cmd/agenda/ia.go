@@ -1,200 +1,102 @@
 package main
 
-// Cliente del servidor OpenCode (opencode serve HTTP, en el mismo contenedor).
-// Las Funciones 1 y 2 no necesitan herramientas del agente: con chat simple
-// basta (el contexto es pequeño y determinista). El turno se manda a una
-// sesión sin permisos y se sondea la respuesta, porque el endpoint
-// experimental/wait devolvió HTML en la versión actual de la API.
+// Cliente de Groq (API compatible con OpenAI, /chat/completions). Las
+// funciones IA del bot no necesitan herramientas: una consigna de sistema,
+// el mensaje y respuesta en modo JSON. Sin estado entre turnos.
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
-	"net/url"
-	"strings"
+	"strconv"
 	"time"
 )
 
+const urlGroq = "https://api.groq.com/openai/v1/chat/completions"
+
 type clienteIA struct {
-	base   string // http://127.0.0.1:4096
-	vault  string
+	url    string
+	clave  string
 	modelo string
 	cli    *http.Client
+	espera func(time.Duration) // inyectable en tests
 }
 
-// nuevoIDMensaje genera un id de mensaje con el prefijo "msg_" que exige
-// OpenCode (mismo formato que usa asistente-notas).
-func nuevoIDMensaje() string {
-	return fmt.Sprintf("msg_agenda_%020d", time.Now().UnixNano())
-}
-
-func nuevoClienteIA(base, vault, modelo string) *clienteIA {
+func nuevoClienteIA(clave, modelo string) *clienteIA {
 	return &clienteIA{
-		base:   base,
-		vault:  vault,
+		url:    urlGroq,
+		clave:  clave,
 		modelo: modelo,
-		cli:    &http.Client{},
+		cli:    &http.Client{Timeout: 90 * time.Second},
+		espera: time.Sleep,
 	}
 }
 
-func (c *clienteIA) llamada(metodo, ruta string, cuerpo any, timeout time.Duration) (map[string]json.RawMessage, error) {
-	ctx := context.Background()
-	var cancel context.CancelFunc
-	if timeout > 0 {
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
-	}
-	var lector io.Reader
-	if cuerpo != nil {
-		valor, err := json.Marshal(cuerpo)
-		if err != nil {
-			return nil, BridgeError("no se pudo preparar la petición al modelo")
-		}
-		lector = bytes.NewReader(valor)
-	}
-	peticion, err := http.NewRequestWithContext(ctx, metodo, c.base+ruta, lector)
-	if err != nil {
-		return nil, BridgeError("no se pudo armar la petición al modelo")
-	}
-	if cuerpo != nil {
-		peticion.Header.Set("Content-Type", "application/json")
-	}
-	respuesta, err := c.cli.Do(peticion)
-	if err != nil {
-		return nil, BridgeError("el modelo no está disponible; reintenta en unos minutos")
-	}
-	defer respuesta.Body.Close()
-	contenido, err := io.ReadAll(io.LimitReader(respuesta.Body, 1<<24))
-	if err != nil {
-		return nil, BridgeError("respuesta incompleta del modelo")
-	}
-	if respuesta.StatusCode >= 400 {
-		return nil, BridgeError("el modelo rechazó la operación; revisa la autenticación del servidor")
-	}
-	if len(bytes.TrimSpace(contenido)) == 0 {
-		return map[string]json.RawMessage{}, nil
-	}
-	resultado := map[string]json.RawMessage{}
-	if err := json.Unmarshal(contenido, &resultado); err != nil {
-		return nil, BridgeError("respuesta inesperada del modelo")
-	}
-	if _, marcada := resultado["_tag"]; marcada {
-		return nil, BridgeError("el modelo devolvió un error")
-	}
-	if _, fallo := resultado["error"]; fallo {
-		return nil, BridgeError("el modelo devolvió un error")
-	}
-	return resultado, nil
+type mensajeChat struct {
+	Rol       string `json:"role"`
+	Contenido string `json:"content"`
 }
 
-func (c *clienteIA) crearSesion() (string, error) {
-	cuerpo := map[string]any{
-		"title":    "Agenda",
-		"agent":    "build",
-		"location": map[string]string{"directory": c.vault},
-		// Sin permisos: en estas funciones la IA nunca toca archivos.
-		"permissions": []map[string]string{{"action": "*", "resource": "*", "effect": "deny"}},
-		"model":       map[string]string{"providerID": "opencode", "id": c.modelo},
-	}
-	respuesta, err := c.llamada("POST", "/api/session", cuerpo, 120*time.Second)
+// completar manda sistema + usuario y devuelve el texto (JSON) del modelo.
+// Ante un 429 (límite por minuto de Groq) espera y reintenta hasta 3 veces.
+func (c *clienteIA) completar(sistema, usuario string) (string, error) {
+	cuerpo, err := json.Marshal(map[string]any{
+		"model":            c.modelo,
+		"messages":         []mensajeChat{{"system", sistema}, {"user", usuario}},
+		"response_format":  map[string]string{"type": "json_object"},
+		"reasoning_effort": "low",
+		"temperature":      0.2,
+	})
 	if err != nil {
-		return "", err
+		return "", BridgeError("no se pudo preparar la petición al modelo")
 	}
-	bruto, ok := respuesta["data"]
-	if !ok {
-		return "", BridgeError("respuesta inesperada del modelo")
-	}
-	var sesion struct {
-		ID string `json:"id"`
-	}
-	if err := json.Unmarshal(bruto, &sesion); err != nil || sesion.ID == "" {
-		return "", BridgeError("respuesta inesperada del modelo")
-	}
-	return sesion.ID, nil
-}
-
-// turno envía el prompt y sondea hasta ver la respuesta del asistente.
-func (c *clienteIA) turno(session, identificador, texto string) (string, error) {
-	cuerpo := map[string]any{
-		"id":     identificador,
-		"prompt": map[string]string{"text": texto},
-	}
-	if _, err := c.llamada("POST", "/api/session/"+url.PathEscape(session)+"/prompt", cuerpo, 120*time.Second); err != nil {
-		return "", err
-	}
-	plazo := time.Now().Add(5 * time.Minute)
-	ruta := "/api/session/" + url.PathEscape(session) + "/message?limit=20&order=desc"
-	for time.Now().Before(plazo) {
-		time.Sleep(4 * time.Second)
-		respuesta, err := c.llamada("GET", ruta, nil, 60*time.Second)
-		if err != nil {
-			return "", err
-		}
-		bruto, ok := respuesta["data"]
-		if !ok {
+	for intento := 0; ; intento++ {
+		texto, reintentarEn, err := c.peticion(cuerpo)
+		if reintentarEn > 0 && intento < 3 {
+			c.espera(reintentarEn)
 			continue
 		}
-		textoRespuesta, listo, err := extraerTurno(bruto, identificador)
-		if err != nil {
-			return "", err
-		}
-		if listo {
-			return textoRespuesta, nil
-		}
+		return texto, err
 	}
-	return "", BridgeError("el modelo no respondió a tiempo; espera y reintenta")
 }
 
-// extraerTurno busca la respuesta al turno del usuario. La página viene del
-// mensaje más reciente al más antiguo, así que la respuesta del asistente está
-// ANTES del turno en la lista: se juntan esos mensajes y se invierten.
-// Devuelve listo=false si el turno aún no aparece o no hay texto todavía, y
-// un error público si el modelo terminó con finish:"error".
-func extraerTurno(bruto json.RawMessage, identificador string) (string, bool, error) {
-	var mensajes []apiMensaje
-	if err := json.Unmarshal(bruto, &mensajes); err != nil {
-		return "", false, nil
+// peticion hace una llamada; si es un 429 devuelve cuánto esperar.
+func (c *clienteIA) peticion(cuerpo []byte) (string, time.Duration, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, "POST", c.url, bytes.NewReader(cuerpo))
+	if err != nil {
+		return "", 0, BridgeError("no se pudo armar la petición al modelo")
 	}
-	var bloques []string
-	encontrado := false
-	for _, m := range mensajes {
-		if m.ID == identificador {
-			encontrado = true
-			break
-		}
-		if m.Tipo != "assistant" {
-			continue
-		}
-		if m.Fin == "error" {
-			return "", false, BridgeError("el modelo falló al responder; reintenta en unos minutos")
-		}
-		for i := len(m.Contenido) - 1; i >= 0; i-- {
-			if c := m.Contenido[i]; c.Tipo == "text" && strings.TrimSpace(c.Texto) != "" {
-				bloques = append(bloques, c.Texto)
-			}
-		}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.clave)
+	resp, err := c.cli.Do(req)
+	if err != nil {
+		return "", 0, BridgeError("el modelo no está disponible; reintenta en unos minutos")
 	}
-	if !encontrado || len(bloques) == 0 {
-		return "", false, nil
+	defer resp.Body.Close()
+	contenido, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	switch {
+	case resp.StatusCode == http.StatusTooManyRequests:
+		espera := 20 * time.Second
+		if s, err := strconv.Atoi(resp.Header.Get("Retry-After")); err == nil && s > 0 && s <= 60 {
+			espera = time.Duration(s) * time.Second
+		}
+		return "", espera, BridgeError("llegué al límite de uso del modelo; espera un minuto y reintenta")
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		return "", 0, BridgeError("el modelo rechazó la clave; revisa GROQ_API_KEY en el servidor")
+	case resp.StatusCode >= 400:
+		return "", 0, BridgeError("el modelo devolvió un error (" + strconv.Itoa(resp.StatusCode) + "); reintenta")
 	}
-	for i, j := 0, len(bloques)-1; i < j; i, j = i+1, j-1 {
-		bloques[i], bloques[j] = bloques[j], bloques[i]
+	var respuesta struct {
+		Choices []struct {
+			Message mensajeChat `json:"message"`
+		} `json:"choices"`
 	}
-	return strings.Join(bloques, "\n"), true, nil
-}
-
-// apiMensaje replica el formato de mensajes de la API de OpenCode.
-type apiMensaje struct {
-	ID        string         `json:"id"`
-	Tipo      string         `json:"type"`
-	Contenido []apiContenido `json:"content"`
-	Fin       string         `json:"finish"` // "error" si el proveedor falló
-}
-
-type apiContenido struct {
-	Tipo  string `json:"type"`
-	Texto string `json:"text"`
+	if err := json.Unmarshal(contenido, &respuesta); err != nil || len(respuesta.Choices) == 0 {
+		return "", 0, BridgeError("respuesta inesperada del modelo")
+	}
+	return respuesta.Choices[0].Message.Contenido, 0, nil
 }

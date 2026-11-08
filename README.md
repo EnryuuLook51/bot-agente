@@ -13,7 +13,7 @@ donde suma valor.
   marcarla hecha.
 - Aviso 15 min antes de cada bloque.
 
-**Con IA (contexto mínimo, modelo barato vía OpenCode):**
+**Con IA (contexto mínimo; Groq, `openai/gpt-oss-120b`, respuesta en ~2 s):**
 - **Texto libre** (Función 2) — agrega, completa, mueve o edita tareas y
   bloques. El modelo recibe solo el JSON de horario + tareas, la fecha/hora
   actual (inyectada por código) y tu mensaje. Si algo es ambiguo, pregunta.
@@ -65,10 +65,9 @@ cmd/agenda/
   avisos.go      avisos de bloque y recordatorios con botones ✅
   render.go      /hoy y /semana
   reloj.go       hora de Lima en español
-  ia.go          cliente HTTP de opencode serve (sin herramientas)
+  ia.go          cliente de Groq (/chat/completions, modo JSON, reintento ante 429)
   ia_turno.go    Función 2: texto libre
   ia_sugerir.go  Función 1: /sugerir
-  servidor.go    supervisor de opencode serve (bajo qemu)
   telegram.go    wrapper de Telegram (sin exponer el token)
 deploy/          Dockerfile, docker-compose.yml, deploy.sh, horario.inicial.json
 ```
@@ -80,6 +79,7 @@ deploy/          Dockerfile, docker-compose.yml, deploy.sh, horario.inicial.json
 ```
 TELEGRAM_BOT_TOKEN=...   # bot propio (BotFather), distinto al de asistente-notas
 TELEGRAM_OWNER_ID=...
+GROQ_API_KEY=...         # la misma clave del agente de la bóveda
 ```
 
 ## Desarrollo
@@ -97,6 +97,4 @@ go run ./cmd/agenda -token X -owner 1 -vault RUTA -datos RUTA check
 
 Copia el código a `/opt/apps/services/bot-agenda/`, instala el horario
 inicial si falta, valida con `agenda check` y levanta el contenedor. No
-publica puertos: el bot solo hace polling saliente y OpenCode escucha en
-loopback dentro del contenedor. Tras arrancar, la IA tarda unos minutos
-(OpenCode corre emulado); `/hoy` y `/semana` funcionan desde el inicio.
+publica puertos: el bot solo hace conexiones salientes (Telegram y Groq).

@@ -4,10 +4,14 @@ package main
 // en dos archivos y el parser JSON del modelo.
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func agendaDePrueba() *Agenda {
@@ -199,31 +203,66 @@ func TestDecodificarAcciones(t *testing.T) {
 	}
 }
 
-func TestIDMensajeFormatoOpenCode(t *testing.T) {
-	a, b := nuevoIDMensaje(), nuevoIDMensaje()
-	if !strings.HasPrefix(a, "msg_") || a == b {
-		t.Fatalf("ids inválidos: %q %q", a, b)
+// groqFalso responde como /chat/completions; con fallos429 > 0, los primeros
+// intentos devuelven 429.
+func groqFalso(t *testing.T, estado int, fallos429 int, contenido string) (*clienteIA, *int) {
+	llamadas := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		llamadas++
+		if r.Header.Get("Authorization") != "Bearer clave" {
+			t.Errorf("falta la clave en la cabecera")
+		}
+		var cuerpo struct {
+			Model    string        `json:"model"`
+			Messages []mensajeChat `json:"messages"`
+			Formato  struct {
+				Tipo string `json:"type"`
+			} `json:"response_format"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&cuerpo)
+		if cuerpo.Model != "m" || len(cuerpo.Messages) != 2 || cuerpo.Messages[0].Rol != "system" || cuerpo.Formato.Tipo != "json_object" {
+			t.Errorf("petición mal armada: %+v", cuerpo)
+		}
+		if llamadas <= fallos429 {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.WriteHeader(estado)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{{"message": map[string]string{"role": "assistant", "content": contenido}}},
+		})
+	}))
+	t.Cleanup(srv.Close)
+	c := nuevoClienteIA("clave", "m")
+	c.url = srv.URL
+	c.espera = func(time.Duration) {}
+	return c, &llamadas
+}
+
+func TestGroqRespondeJSON(t *testing.T) {
+	c, _ := groqFalso(t, 200, 0, `{"acciones":[],"mensaje":"hola"}`)
+	texto, err := c.completar("sistema", "usuario")
+	if err != nil || texto != `{"acciones":[],"mensaje":"hola"}` {
+		t.Fatalf("respuesta inesperada: %q %v", texto, err)
 	}
 }
 
-func TestExtraerTurnoOrdenDescendente(t *testing.T) {
-	// Formato real de /api/session/:id/message?order=desc (más reciente primero).
-	bruto := []byte(`[
-		{"id":"msg_3","type":"assistant","content":[{"type":"text","text":"segunda"}]},
-		{"id":"msg_2","type":"assistant","content":[{"type":"reasoning","text":"pienso"},{"type":"text","text":"primera"}]},
-		{"id":"msg_agenda_1","type":"user","text":"hola"},
-		{"id":"msg_0","type":"assistant","content":[{"type":"text","text":"turno viejo"}]}
-	]`)
-	texto, listo, err := extraerTurno(bruto, "msg_agenda_1")
-	if err != nil || !listo || texto != "primera\nsegunda" {
-		t.Fatalf("respuesta mal armada: %q %v", texto, listo)
+func TestGroqReintentaTras429(t *testing.T) {
+	c, llamadas := groqFalso(t, 200, 2, `{"ok":true}`)
+	if texto, err := c.completar("s", "u"); err != nil || texto != `{"ok":true}` || *llamadas != 3 {
+		t.Fatalf("no reintentó bien: %q %v llamadas=%d", texto, err, *llamadas)
 	}
-	if _, listo, _ := extraerTurno([]byte(`[{"id":"msg_agenda_1","type":"user"}]`), "msg_agenda_1"); listo {
-		t.Fatal("sin respuesta todavía no debe estar listo")
+	c, llamadas = groqFalso(t, 200, 10, `{}`)
+	if _, err := c.completar("s", "u"); err == nil || *llamadas != 4 {
+		t.Fatalf("debió rendirse tras 3 reintentos: %v llamadas=%d", err, *llamadas)
 	}
-	// Formato real de un fallo del proveedor: finish "error", sin contenido.
-	fallo := []byte(`[{"id":"msg_9","type":"assistant","content":[],"finish":"error","error":{"message":"Model is unavailable."}},{"id":"msg_agenda_1","type":"user"}]`)
-	if _, _, err := extraerTurno(fallo, "msg_agenda_1"); err == nil {
-		t.Fatal("debió detectar el error del modelo")
+}
+
+func TestGroqClaveRechazada(t *testing.T) {
+	c, _ := groqFalso(t, 401, 0, "")
+	_, err := c.completar("s", "u")
+	if err == nil || !strings.Contains(err.Error(), "GROQ_API_KEY") {
+		t.Fatalf("error inesperado: %v", err)
 	}
 }

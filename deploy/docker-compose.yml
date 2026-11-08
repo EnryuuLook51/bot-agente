@@ -1,7 +1,8 @@
 # Bot de agenda en Docker (ASUS). Convenciones del MANUAL: servicio en
 # /opt/apps/services/bot-agenda/ con este docker-compose.yml, sin puertos
 # publicados (el bot solo sale por polling) y restart: unless-stopped.
-# Secretos en agent.env (chmod 600), nunca en Git.
+# Secretos en agent.env (chmod 600), nunca en Git: TELEGRAM_BOT_TOKEN,
+# TELEGRAM_OWNER_ID y GROQ_API_KEY.
 services:
   agenda:
     build: .
@@ -13,10 +14,7 @@ services:
       TZ: America/Lima
       VAULT: /data/vault
       DATOS_DIR: /data/agenda
-      OPC_BIN: /root/.opencode/bin/opencode
-      OPC_QEMU: /usr/bin/qemu-x86_64-static
-      OPC_BASE: http://127.0.0.1:4096
-      MODELO: glm-5.3-flash-free
+      MODELO: openai/gpt-oss-120b
     # Sin puertos publicados. Con "compose run --rm agenda check" valida todo.
     volumes:
       # Bóveda sincronizada por Git en el host: SOLO LECTURA. El bot solo lee
@@ -25,8 +23,6 @@ services:
       # Datos del bot: horario.json, tareas.json, registro.jsonl, estado.json,
       # respaldos/. Fuera de la bóveda.
       - /opt/apps/data/bot-agenda:/data/agenda
-      # Credencial de OpenCode creada en el servidor (opencode auth login).
-      - /home/franco/.local/share/opencode/auth.json:/root/.local/share/opencode/auth.json:ro
     logging:
       driver: json-file
       options:

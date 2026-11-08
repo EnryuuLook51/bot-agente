@@ -3,7 +3,8 @@ package main
 // Función 2: texto libre → el modelo recibe SOLO la agenda (horario + tareas
 // en JSON), la fecha/hora actual (inyectada por código) y el mensaje; responde
 // acciones JSON que el bot valida, aplica y guarda. Si algo es ambiguo, pide
-// aclaración en vez de actuar.
+// aclaración en vez de actuar. La consigna va como mensaje de sistema y el
+// texto del usuario aparte, para que no pueda reescribir las reglas.
 
 import (
 	"encoding/json"
@@ -60,12 +61,7 @@ func ejecutarTurno(cliente *clienteIA, datos *almacen, mensaje string, ahora tim
 	if err != nil {
 		return "", nil, err
 	}
-	sesion, err := cliente.crearSesion()
-	if err != nil {
-		return "", nil, err
-	}
-	respuesta, err := cliente.turno(sesion, nuevoIDMensaje(),
-		contextoTurno(agenda, ahora)+"\n\n=== MENSAJE DEL USUARIO ===\n"+mensaje)
+	respuesta, err := cliente.completar(contextoTurno(agenda, ahora), mensaje)
 	if err != nil {
 		return "", nil, err
 	}
