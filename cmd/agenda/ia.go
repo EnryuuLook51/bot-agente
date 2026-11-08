@@ -119,9 +119,8 @@ func (c *clienteIA) crearSesion() (string, error) {
 // turno envía el prompt y sondea hasta ver la respuesta del asistente.
 func (c *clienteIA) turno(session, identificador, texto string) (string, error) {
 	cuerpo := map[string]any{
-		"id":       identificador,
-		"text":     texto,
-		"metadata": map[string]string{"bot": "agenda"},
+		"id":     identificador,
+		"prompt": map[string]string{"text": texto},
 	}
 	if _, err := c.llamada("POST", "/api/session/"+url.PathEscape(session)+"/prompt", cuerpo, 120*time.Second); err != nil {
 		return "", err
@@ -145,37 +144,38 @@ func (c *clienteIA) turno(session, identificador, texto string) (string, error) 
 	return "", BridgeError("el modelo no respondió a tiempo; espera y reintenta")
 }
 
-// extraerTurno busca en la página de mensajes el turno del usuario y junta el
-// texto del asistente posterior (o indica que todavía no llegó).
+// extraerTurno busca la respuesta al turno del usuario. La página viene del
+// mensaje más reciente al más antiguo, así que la respuesta del asistente está
+// ANTES del turno en la lista: se juntan esos mensajes y se invierten.
+// Devuelve listo=false si el turno aún no aparece o no hay texto todavía.
 func extraerTurno(bruto json.RawMessage, identificador string) (string, bool) {
 	var mensajes []apiMensaje
 	if err := json.Unmarshal(bruto, &mensajes); err != nil {
 		return "", false
 	}
-	detras := false
 	var bloques []string
+	encontrado := false
 	for _, m := range mensajes {
 		if m.ID == identificador {
-			detras = true
+			encontrado = true
+			break
+		}
+		if m.Tipo != "assistant" {
 			continue
 		}
-		if !detras || m.Tipo != "assistant" {
-			continue
-		}
-		for _, c := range m.Contenido {
-			if c.Tipo == "text" && strings.TrimSpace(c.Texto) != "" {
+		for i := len(m.Contenido) - 1; i >= 0; i-- {
+			if c := m.Contenido[i]; c.Tipo == "text" && strings.TrimSpace(c.Texto) != "" {
 				bloques = append(bloques, c.Texto)
 			}
 		}
 	}
-	// La lista viene del más reciente al más antiguo: orden natural al invertir.
+	if !encontrado || len(bloques) == 0 {
+		return "", false
+	}
 	for i, j := 0, len(bloques)-1; i < j; i, j = i+1, j-1 {
 		bloques[i], bloques[j] = bloques[j], bloques[i]
 	}
-	if detras && len(bloques) > 0 {
-		return strings.Join(bloques, "\n"), true
-	}
-	return "", false
+	return strings.Join(bloques, "\n"), true
 }
 
 // apiMensaje replica el formato de mensajes de la API de OpenCode.

@@ -205,3 +205,20 @@ func TestIDMensajeFormatoOpenCode(t *testing.T) {
 		t.Fatalf("ids inválidos: %q %q", a, b)
 	}
 }
+
+func TestExtraerTurnoOrdenDescendente(t *testing.T) {
+	// Formato real de /api/session/:id/message?order=desc (más reciente primero).
+	bruto := []byte(`[
+		{"id":"msg_3","type":"assistant","content":[{"type":"text","text":"segunda"}]},
+		{"id":"msg_2","type":"assistant","content":[{"type":"reasoning","text":"pienso"},{"type":"text","text":"primera"}]},
+		{"id":"msg_agenda_1","type":"user","text":"hola"},
+		{"id":"msg_0","type":"assistant","content":[{"type":"text","text":"turno viejo"}]}
+	]`)
+	texto, listo := extraerTurno(bruto, "msg_agenda_1")
+	if !listo || texto != "primera\nsegunda" {
+		t.Fatalf("respuesta mal armada: %q %v", texto, listo)
+	}
+	if _, listo := extraerTurno([]byte(`[{"id":"msg_agenda_1","type":"user"}]`), "msg_agenda_1"); listo {
+		t.Fatal("sin respuesta todavía no debe estar listo")
+	}
+}

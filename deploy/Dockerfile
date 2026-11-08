@@ -24,6 +24,10 @@ RUN apt-get update \
         "https://github.com/anomalyco/opencode/releases/latest/download/opencode-linux-x64-baseline.tar.gz" \
     && tar xzf /tmp/oc.tar.gz -C /root/.opencode/bin \
     && rm /tmp/oc.tar.gz \
-    && /usr/bin/qemu-x86_64-static /root/.opencode/bin/opencode --version
+    && /usr/bin/qemu-x86_64-static /root/.opencode/bin/opencode --version \
+    && mkdir -p /root/.cache/opencode \
+    && curl -fsSL -o /root/.cache/opencode/models.json https://models.dev/api.json
+# El catálogo de modelos va precargado: bajo qemu, OpenCode no alcanza a
+# descargarlo al arrancar y queda sin modelos ("Unsupported API ... native").
 COPY --from=build /salida/agenda /usr/local/bin/agenda
 CMD ["agenda"]
