@@ -45,45 +45,76 @@ func tareasDelDia(agenda *Agenda, dia string, fecha string) []Tarea {
 	return lista
 }
 
-// renderDia arma el itinerario de un día concreto.
+// lineaTarea formatea una tarea pendiente: "☐ 10:00 Leer libro".
+func lineaTarea(t Tarea) string {
+	if t.Hora != "" {
+		return "☐ " + t.Hora + " " + t.Texto
+	}
+	return "☐ " + t.Texto
+}
+
+// ordenarPorHora deja primero las tareas con hora, en orden.
+func ordenarPorHora(tareas []Tarea) {
+	sort.SliceStable(tareas, func(i, j int) bool {
+		if tareas[i].Hora == "" || tareas[j].Hora == "" {
+			return tareas[i].Hora != "" && tareas[j].Hora == ""
+		}
+		return tareas[i].Hora < tareas[j].Hora
+	})
+}
+
+// renderDia arma el itinerario de un día: bloques y tareas con hora en orden
+// cronológico, las tareas del día sin hora y las pendientes sin fecha.
 func renderDia(agenda *Agenda, ahora time.Time) string {
 	dia := diaAbreviado(ahora)
 	fecha := fechaAbreviada(ahora)
 	bloques := bloquesDeDia(agenda, dia)
 	tareas := tareasDelDia(agenda, dia, fecha)
-	var lineas []string
-	titulo := "📅 " + diasSemana[indiceSemana(ahora)] + " " + strconv.Itoa(ahora.Day()) +
-		" de " + nombresMes[int(ahora.Month())-1]
-	lineas = append(lineas, titulo)
+	ordenarPorHora(tareas)
+	lineas := []string{"📅 " + diasSemana[indiceSemana(ahora)] + " " + strconv.Itoa(ahora.Day()) +
+		" de " + nombresMes[int(ahora.Month())-1]}
 	if len(bloques) == 0 && len(tareas) == 0 {
 		lineas = append(lineas, "Sin bloques ni tareas para hoy.")
 	}
+
+	// Línea de tiempo: bloques (con sus tareas) y tareas sueltas con hora.
+	type evento struct {
+		minuto int
+		lineas []string
+	}
+	var eventos []evento
 	for _, b := range bloques {
-		linea := "• " + b.Inicio + "–" + b.Fin + " " + b.Nombre
-		if b.Fuente != "" {
-			linea += " (" + b.Fuente + ")"
-		}
-		lineas = append(lineas, linea)
+		ev := evento{horaEnMinutos(b.Inicio), []string{"• " + b.Inicio + "–" + b.Fin + " " + b.Nombre}}
 		for _, t := range tareas {
 			if t.Bloque == b.ID {
-				lineas = append(lineas, "   ☐ "+t.Texto)
+				ev.lineas = append(ev.lineas, "   "+lineaTarea(t))
 			}
 		}
+		eventos = append(eventos, ev)
 	}
-	var sueltas []string
+	var sinHora []string
 	for _, t := range tareas {
-		if t.Bloque == "" || agenda.encontrarBloque(t.Bloque) == nil {
-			sueltas = append(sueltas, "☐ "+t.Texto)
+		if agenda.encontrarBloque(t.Bloque) != nil && bloqueEsDelDia(agenda, t.Bloque, dia) {
+			continue // ya salió dentro de su bloque
+		}
+		if t.Hora != "" {
+			eventos = append(eventos, evento{horaEnMinutos(t.Hora), []string{"• " + t.Hora + " ☐ " + t.Texto}})
+		} else {
+			sinHora = append(sinHora, lineaTarea(t))
 		}
 	}
-	if len(sueltas) > 0 {
-		lineas = append(lineas, "Pendientes sin bloque:")
-		lineas = append(lineas, sueltas...)
+	sort.SliceStable(eventos, func(i, j int) bool { return eventos[i].minuto < eventos[j].minuto })
+	for _, ev := range eventos {
+		lineas = append(lineas, ev.lineas...)
+	}
+	if len(sinHora) > 0 {
+		lineas = append(lineas, "Tareas de hoy:")
+		lineas = append(lineas, sinHora...)
 	}
 	var sinFecha []string
 	for _, t := range agenda.Tareas {
 		if t.Estado == "pendiente" && t.Fecha == "" && t.Bloque == "" {
-			sinFecha = append(sinFecha, "☐ "+t.Texto)
+			sinFecha = append(sinFecha, lineaTarea(t))
 		}
 	}
 	if len(sinFecha) > 0 {
@@ -91,6 +122,11 @@ func renderDia(agenda *Agenda, ahora time.Time) string {
 		lineas = append(lineas, sinFecha...)
 	}
 	return strings.Join(lineas, "\n")
+}
+
+func bloqueEsDelDia(agenda *Agenda, id, dia string) bool {
+	b := agenda.encontrarBloque(id)
+	return b != nil && (b.Dia == dia || b.Dia == "diario")
 }
 
 // renderSemana arma la vista de lunes a domingo.
@@ -106,13 +142,24 @@ func renderSemana(agenda *Agenda, ahora time.Time) string {
 			marca = " ←"
 		}
 		bloques := bloquesDeDia(agenda, dia)
-		if len(bloques) == 0 {
+		fechaDia := base.AddDate(0, 0, i)
+		var tareas []Tarea
+		for _, t := range agenda.Tareas {
+			if t.Estado == "pendiente" && t.Fecha == fechaAbreviada(fechaDia) {
+				tareas = append(tareas, t)
+			}
+		}
+		ordenarPorHora(tareas)
+		if len(bloques) == 0 && len(tareas) == 0 {
 			lineas = append(lineas, "• "+dia+marca+": —")
 			continue
 		}
 		lineas = append(lineas, "• "+dia+marca+":")
 		for _, b := range bloques {
 			lineas = append(lineas, fmt.Sprintf("   %s–%s %s", b.Inicio, b.Fin, b.Nombre))
+		}
+		for _, t := range tareas {
+			lineas = append(lineas, "   "+lineaTarea(t))
 		}
 	}
 	pendientes := 0

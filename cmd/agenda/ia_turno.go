@@ -15,16 +15,24 @@ import (
 
 const consignaTurno = `Eres el gestor de la agenda del dueño de este bot por Telegram.
 Fecha y hora actuales: %s.
-Agenda actual en JSON (bloques = horario fijo; tareas = pendientes y hechas):
+
+CALENDARIO (fechas exactas; úsalo SIEMPRE para convertir días a fechas y
+nunca calcules el día de la semana por tu cuenta):
+%s
+
+BLOQUES del horario semanal (id día inicio–fin nombre); se repiten cada semana:
+%s
+
+TAREAS (JSON):
 %s
 
 Tu respuesta es SIEMPRE un único objeto JSON válido, sin texto alrededor:
 {"acciones":[...],"mensaje":"..."}
 Acciones posibles:
- {"tipo":"agregar_tarea","texto":"...","fecha":"YYYY-MM-DD o vacío","bloque":"id o vacío"}
+ {"tipo":"agregar_tarea","texto":"...","fecha":"YYYY-MM-DD o vacío","hora":"HH:MM o vacío","bloque":"id o vacío"}
  {"tipo":"completar_tarea","id":"..."}
  {"tipo":"editar_tarea","id":"...","texto":"..."}
- {"tipo":"asignar_tarea","id":"...","fecha":"YYYY-MM-DD o vacío","bloque":"id o vacío"}
+ {"tipo":"asignar_tarea","id":"...", y solo los campos a cambiar: "fecha":"YYYY-MM-DD","hora":"HH:MM","bloque":"id" ("" los borra)}
  {"tipo":"eliminar_tarea","id":"..."}
  {"tipo":"agregar_bloque","tipobloque":"clase|estudio|personal","nombre":"...","fuente":"HORARIO|PERSONAL","dia":"lun|mar|mié|jue|vie|sáb|dom|diario","inicio":"HH:MM","fin":"HH:MM"}
  {"tipo":"editar_bloque","id":"...", ...solo los campos a cambiar}
@@ -39,6 +47,17 @@ Reglas:
   del próximo día de ese bloque.
 - Los mensajes anteriores de esta conversación te dan contexto: úsalos para
   entender referencias como "esa", "lo" o una respuesta a tu pregunta.
+- REGLA DE ORO: "mensaje" solo puede afirmar lo que hacen tus acciones. Si
+  dices que programaste una fecha u hora, DEBE haber una acción con ese
+  campo. Nunca digas que guardaste algo que no está en "acciones".
+- Si el usuario te deja decidir ("tu criterio", "cuando veas"), decide tú:
+  elige un hueco libre mirando los bloques de ese día (las clases y los
+  traslados 🚍 están ocupados; evita 00:00–06:00) y aplícalo directamente
+  con una acción; en "mensaje" di qué elegiste y por qué, en una frase.
+- Si te preguntan si un horario está libre, revisa los bloques de ese día
+  y responde concretamente qué hay antes y después.
+- Nunca pidas formatos (YYYY-MM-DD, HH:MM): el usuario habla normal y tú
+  conviertes.
 - Convierte fechas relativas ("mañana", "el viernes") a YYYY-MM-DD usando la
   fecha actual.
 - No agregues una tarea idéntica a una pendiente existente.
@@ -54,11 +73,44 @@ Reglas:
 func contextoTurno(agenda *Agenda, ahora time.Time) string {
 	fecha := ahora.Format("2006-01-02 15:04") + " (" + diasSemana[indiceSemana(ahora)] +
 		", America/Lima)"
-	compacta, err := json.Marshal(agenda)
+	tareas, err := json.Marshal(agenda.Tareas)
 	if err != nil {
-		compacta = []byte("{}")
+		tareas = []byte("[]")
 	}
-	return fmt.Sprintf(consignaTurno, fecha, string(compacta))
+	return fmt.Sprintf(consignaTurno, fecha, calendario(ahora, 14), bloquesCompactos(agenda), string(tareas))
+}
+
+// calendario lista los próximos n días: "hoy sáb 2026-11-07", "dom 2026-11-08"...
+func calendario(ahora time.Time, n int) string {
+	var lineas []string
+	for i := 0; i < n; i++ {
+		d := ahora.AddDate(0, 0, i)
+		linea := diasSemana[indiceSemana(d)] + " " + fechaAbreviada(d)
+		switch i {
+		case 0:
+			linea += " (hoy)"
+		case 1:
+			linea += " (mañana)"
+		}
+		lineas = append(lineas, linea)
+	}
+	return strings.Join(lineas, "\n")
+}
+
+// bloquesCompactos resume el horario en una línea por bloque, en orden.
+func bloquesCompactos(agenda *Agenda) string {
+	var lineas []string
+	for _, dia := range append(diasAbreviados[:], "diario") {
+		for _, b := range bloquesDeDia(agenda, dia) { // ordenados por hora
+			if b.Dia == dia {
+				lineas = append(lineas, b.ID+" "+b.Dia+" "+b.Inicio+"–"+b.Fin+" "+b.Nombre)
+			}
+		}
+	}
+	if len(lineas) == 0 {
+		return "(sin bloques)"
+	}
+	return strings.Join(lineas, "\n")
 }
 
 // ejecutarTurno corre la Función 2: agenda → modelo → acciones aplicadas sobre

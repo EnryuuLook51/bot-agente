@@ -43,6 +43,20 @@ func avisosPendientes(agenda *Agenda, enviados map[string]bool, ahora time.Time)
 				texto: "⏰ En " + strconv.Itoa(inicio-minutoActual) + " min: " + b.Nombre + " (" + b.Inicio + "–" + b.Fin + ")"})
 		}
 	}
+	for _, t := range agenda.Tareas {
+		if t.Estado != "pendiente" || t.Fecha != fecha || t.Hora == "" {
+			continue
+		}
+		inicio := horaEnMinutos(t.Hora)
+		llave := llaveAviso(t.ID, fecha)
+		if inicio < 0 || enviados[llave] {
+			continue
+		}
+		if inicio-ventana <= minutoActual && minutoActual < inicio {
+			avisos = append(avisos, avisoBloque{llave: llave,
+				texto: "⏰ En " + strconv.Itoa(inicio-minutoActual) + " min: ☐ " + t.Texto + " (" + t.Hora + ")"})
+		}
+	}
 	return avisos
 }
 

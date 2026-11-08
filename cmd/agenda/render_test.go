@@ -120,3 +120,29 @@ func TestConfirmacionIncluyeFecha(t *testing.T) {
 		t.Fatalf("confirmación sin fecha legible: %v", resumen)
 	}
 }
+
+func TestTareaConHora(t *testing.T) {
+	agenda := agendaDePrueba()
+	_, n := aplicarAcciones(agenda, []map[string]any{
+		{"tipo": "asignar_tarea", "id": "i1", "hora": "9:30"}, // conserva la fecha 2026-11-13
+	})
+	if n != 1 || agenda.encontrarTarea("i1").Fecha != "2026-11-13" || agenda.encontrarTarea("i1").Hora != "09:30" {
+		t.Fatalf("asignar solo la hora falló: %+v", agenda.encontrarTarea("i1"))
+	}
+	if _, n := aplicarAcciones(agenda, []map[string]any{{"tipo": "agregar_tarea", "texto": "x", "hora": "10:00"}}); n != 0 {
+		t.Fatal("una hora sin fecha debió rechazarse")
+	}
+	viernes := time.Date(2026, 11, 13, 9, 15, 0, 0, lima())
+	avisos := avisosPendientes(agenda, map[string]bool{}, viernes)
+	if len(avisos) != 1 || !strings.Contains(avisos[0].texto, "Leer capítulo 3") {
+		t.Fatalf("sin aviso de tarea con hora: %v", avisos)
+	}
+	salida := renderDia(agenda, viernes)
+	iTarea, iBloque := strings.Index(salida, "09:30 ☐ Leer capítulo 3"), strings.Index(salida, "21:00–22:30")
+	if iTarea < 0 || iBloque < 0 || iTarea > iBloque {
+		t.Fatalf("la tarea con hora no quedó en orden cronológico:\n%s", salida)
+	}
+	if !strings.Contains(renderSemana(agenda, viernes), "☐ 09:30 Leer capítulo 3") {
+		t.Fatalf("/semana no muestra la tarea:\n%s", renderSemana(agenda, viernes))
+	}
+}

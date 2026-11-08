@@ -36,6 +36,7 @@ type Tarea struct {
 	Texto  string `json:"texto"`
 	Estado string `json:"estado"`           // pendiente | completada
 	Fecha  string `json:"fecha,omitempty"`  // "2026-11-06" (o vacío)
+	Hora   string `json:"hora,omitempty"`   // "10:00" (opcional; requiere fecha)
 	Bloque string `json:"bloque,omitempty"` // id del bloque asignado
 	Origen string `json:"origen"`           // usuario | ia | sugerencia
 }
@@ -154,6 +155,9 @@ func validarAgenda(a *Agenda) error {
 		}
 		if t.Fecha != "" && !fechaValida(t.Fecha) {
 			return fmt.Errorf("tarea %s: fecha inválida %q", t.ID, t.Fecha)
+		}
+		if t.Hora != "" && (!formatoHora.MatchString(t.Hora) || t.Fecha == "") {
+			return fmt.Errorf("tarea %s: hora inválida o sin fecha %q", t.ID, t.Hora)
 		}
 		if t.Bloque != "" && !vistosBloques[t.Bloque] {
 			return fmt.Errorf("tarea %s apunta a bloque inexistente %q", t.ID, t.Bloque)

@@ -80,6 +80,7 @@ func agregarTarea(agenda *Agenda, accion map[string]any) (string, error) {
 		Texto:  texto,
 		Estado: "pendiente",
 		Fecha:  cadenaDe(accion, "fecha"),
+		Hora:   horaDe(accion),
 		Bloque: cadenaDe(accion, "bloque"),
 		Origen: "ia",
 	})
@@ -111,16 +112,28 @@ func asignarTarea(agenda *Agenda, accion map[string]any) (string, error) {
 	if tarea == nil {
 		return "", fmt.Errorf("no encontré esa tarea para mover")
 	}
-	tarea.Fecha = cadenaDe(accion, "fecha") // vacío desasigna el día
-	tarea.Bloque = cadenaDe(accion, "bloque")
-	lugar, dia := "sin bloque", "sin fecha"
-	if b := agenda.encontrarBloque(tarea.Bloque); b != nil {
-		lugar = b.Nombre
+	// Solo cambia los campos presentes en la acción ("" los borra).
+	if _, ok := accion["fecha"]; ok {
+		tarea.Fecha = cadenaDe(accion, "fecha")
+		if tarea.Fecha == "" {
+			tarea.Hora = "" // sin fecha no hay hora
+		}
 	}
-	if tarea.Fecha != "" {
-		dia = fechaLegible(tarea.Fecha)
+	if _, ok := accion["hora"]; ok {
+		tarea.Hora = horaDe(accion)
 	}
-	return "movida a " + lugar + " (" + dia + "): " + tarea.Texto, nil
+	if _, ok := accion["bloque"]; ok {
+		tarea.Bloque = cadenaDe(accion, "bloque")
+	}
+	return "programada: " + tarea.Texto + " (" + cuandoTarea(agenda, tarea) + ")", nil
+}
+
+// horaDe lee el campo "hora" normalizado ("9:30" → "09:30").
+func horaDe(accion map[string]any) string {
+	if h := cadenaDe(accion, "hora"); h != "" {
+		return normalizarHora(h)
+	}
+	return ""
 }
 
 func eliminarTarea(agenda *Agenda, accion map[string]any) (string, error) {
@@ -207,7 +220,11 @@ func eliminarBloque(agenda *Agenda, accion map[string]any) (string, error) {
 func cuandoTarea(agenda *Agenda, t *Tarea) string {
 	var partes []string
 	if t.Fecha != "" {
-		partes = append(partes, fechaLegible(t.Fecha))
+		cuando := fechaLegible(t.Fecha)
+		if t.Hora != "" {
+			cuando += " a las " + t.Hora
+		}
+		partes = append(partes, cuando)
 	}
 	if b := agenda.encontrarBloque(t.Bloque); b != nil {
 		partes = append(partes, b.Nombre)
