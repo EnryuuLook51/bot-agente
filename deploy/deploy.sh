@@ -44,7 +44,7 @@ if ! sudo -n grep -q '^GROQ_API_KEY=.' agent.env; then
 fi
 sudo -n mkdir -p '$DATOS'
 sudo -n chmod 700 '$DATOS'
-if [ ! -f '$DATOS/horario.json' ]; then
+if ! sudo -n test -f '$DATOS/horario.json'; then
     sudo -n cp horario.inicial.json '$DATOS/horario.json'
     echo 'horario.json inicial instalado en $DATOS'
 fi
