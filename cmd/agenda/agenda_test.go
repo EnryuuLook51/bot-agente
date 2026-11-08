@@ -266,3 +266,16 @@ func TestGroqClaveRechazada(t *testing.T) {
 		t.Fatalf("error inesperado: %v", err)
 	}
 }
+
+func TestMensajeCoherenteConLoGuardado(t *testing.T) {
+	guardado := []string{"✔ programada: leer libro (domingo 8 de noviembre a las 10:00)"}
+	if mensajeCoherente("Lo puse el sábado a las 10:00 porque está libre.", guardado) {
+		t.Fatal("debió descartar un mensaje que nombra otro día")
+	}
+	if !mensajeCoherente("Elegí esa hora porque no tienes clases.", guardado) {
+		t.Fatal("un motivo sin días debe mostrarse")
+	}
+	if !mensajeCoherente("El domingo tienes la mañana libre.", guardado) {
+		t.Fatal("nombrar el mismo día guardado es válido")
+	}
+}

@@ -50,6 +50,10 @@ Reglas:
 - REGLA DE ORO: "mensaje" solo puede afirmar lo que hacen tus acciones. Si
   dices que programaste una fecha u hora, DEBE haber una acción con ese
   campo. Nunca digas que guardaste algo que no está en "acciones".
+- Cambia SOLO lo que se pide. Si piden una hora para una tarea que ya tiene
+  fecha, manda asignar_tarea solo con "hora" y conserva su fecha.
+- Cuando haya acciones, el sistema ya muestra la fecha y hora guardadas: en
+  "mensaje" no repitas días ni fechas, solo explica brevemente el motivo.
 - Si el usuario te deja decidir ("tu criterio", "cuando veas"), decide tú:
   elige un hueco libre mirando los bloques de ese día (las clases y los
   traslados 🚍 están ocupados; evita 00:00–06:00) y aplícalo directamente
@@ -151,11 +155,30 @@ func ejecutarTurno(cliente *clienteIA, datos *almacen, historial []mensajeChat, 
 	if err != nil && err != errSinCambios {
 		return "", resumen, "", err
 	}
+	// Las líneas ✔ las arma el código desde lo guardado: son la verdad. El
+	// texto del modelo solo se agrega como explicación si no la contradice.
 	partes := resumen
-	if mensajeModelo != "" && err == nil {
-		partes = append([]string{mensajeModelo}, resumen...)
+	if err == nil && mensajeCoherente(mensajeModelo, resumen) {
+		partes = append(append([]string{}, resumen...), mensajeModelo)
 	}
 	return strings.Join(partes, "\n"), resumen, respuesta, nil
+}
+
+// mensajeCoherente descarta el texto del modelo si nombra un día de la
+// semana que no aparece en lo que realmente se guardó (p. ej. dice
+// «sábado» cuando la tarea quedó el domingo).
+func mensajeCoherente(mensaje string, resumen []string) bool {
+	if mensaje == "" {
+		return false
+	}
+	texto := strings.ToLower(mensaje)
+	guardado := strings.ToLower(strings.Join(resumen, " "))
+	for _, dia := range diasSemana {
+		if strings.Contains(texto, dia) && !strings.Contains(guardado, dia) {
+			return false
+		}
+	}
+	return true
 }
 
 // errSinCambios indica que ninguna acción fue válida: no se escribe a disco.
