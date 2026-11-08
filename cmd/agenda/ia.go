@@ -39,12 +39,15 @@ type mensajeChat struct {
 	Contenido string `json:"content"`
 }
 
-// completar manda sistema + usuario y devuelve el texto (JSON) del modelo.
-// Ante un 429 (límite por minuto de Groq) espera y reintenta hasta 3 veces.
-func (c *clienteIA) completar(sistema, usuario string) (string, error) {
+// completar manda sistema + historial reciente + usuario y devuelve el texto
+// (JSON) del modelo. Ante un 429 (límite por minuto de Groq) espera y
+// reintenta hasta 3 veces.
+func (c *clienteIA) completar(sistema string, historial []mensajeChat, usuario string) (string, error) {
+	mensajes := append([]mensajeChat{{"system", sistema}}, historial...)
+	mensajes = append(mensajes, mensajeChat{"user", usuario})
 	cuerpo, err := json.Marshal(map[string]any{
 		"model":            c.modelo,
-		"messages":         []mensajeChat{{"system", sistema}, {"user", usuario}},
+		"messages":         mensajes,
 		"response_format":  map[string]string{"type": "json_object"},
 		"reasoning_effort": "low",
 		"temperature":      0.2,

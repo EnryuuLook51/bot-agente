@@ -242,7 +242,7 @@ func groqFalso(t *testing.T, estado int, fallos429 int, contenido string) (*clie
 
 func TestGroqRespondeJSON(t *testing.T) {
 	c, _ := groqFalso(t, 200, 0, `{"acciones":[],"mensaje":"hola"}`)
-	texto, err := c.completar("sistema", "usuario")
+	texto, err := c.completar("sistema", nil, "usuario")
 	if err != nil || texto != `{"acciones":[],"mensaje":"hola"}` {
 		t.Fatalf("respuesta inesperada: %q %v", texto, err)
 	}
@@ -250,18 +250,18 @@ func TestGroqRespondeJSON(t *testing.T) {
 
 func TestGroqReintentaTras429(t *testing.T) {
 	c, llamadas := groqFalso(t, 200, 2, `{"ok":true}`)
-	if texto, err := c.completar("s", "u"); err != nil || texto != `{"ok":true}` || *llamadas != 3 {
+	if texto, err := c.completar("s", nil, "u"); err != nil || texto != `{"ok":true}` || *llamadas != 3 {
 		t.Fatalf("no reintentó bien: %q %v llamadas=%d", texto, err, *llamadas)
 	}
 	c, llamadas = groqFalso(t, 200, 10, `{}`)
-	if _, err := c.completar("s", "u"); err == nil || *llamadas != 4 {
+	if _, err := c.completar("s", nil, "u"); err == nil || *llamadas != 4 {
 		t.Fatalf("debió rendirse tras 3 reintentos: %v llamadas=%d", err, *llamadas)
 	}
 }
 
 func TestGroqClaveRechazada(t *testing.T) {
 	c, _ := groqFalso(t, 401, 0, "")
-	_, err := c.completar("s", "u")
+	_, err := c.completar("s", nil, "u")
 	if err == nil || !strings.Contains(err.Error(), "GROQ_API_KEY") {
 		t.Fatalf("error inesperado: %v", err)
 	}

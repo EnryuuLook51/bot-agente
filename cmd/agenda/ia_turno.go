@@ -31,6 +31,14 @@ Acciones posibles:
  {"tipo":"eliminar_bloque","id":"...","confirmado":true}
 Reglas:
 - Usa solo ids que existan en la agenda; los ids nuevos los pone el sistema.
+  Nunca muestres ids (i1, b3...) al usuario: nombra la tarea o el bloque.
+- Para agregar una tarea necesitas CUÁNDO: una fecha o un bloque. Si el
+  usuario no lo dice, NO la agregues: pregunta en "mensaje" para cuándo es.
+  Solo agrégala sin fecha si el usuario dice explícitamente "sin fecha".
+- Si asignas un bloque semanal a una tarea, pon también la fecha concreta
+  del próximo día de ese bloque.
+- Los mensajes anteriores de esta conversación te dan contexto: úsalos para
+  entender referencias como "esa", "lo" o una respuesta a tu pregunta.
 - Convierte fechas relativas ("mañana", "el viernes") a YYYY-MM-DD usando la
   fecha actual.
 - No agregues una tarea idéntica a una pendiente existente.
@@ -55,27 +63,29 @@ func contextoTurno(agenda *Agenda, ahora time.Time) string {
 
 // ejecutarTurno corre la Función 2: agenda → modelo → acciones aplicadas sobre
 // la agenda FRESCA (por si cambió mientras el modelo pensaba) → guardado.
-// Devuelve la respuesta para el usuario y el resumen de cambios para el registro.
-func ejecutarTurno(cliente *clienteIA, datos *almacen, mensaje string, ahora time.Time) (string, []string, error) {
+// historial son los últimos intercambios (usuario / respuesta JSON del modelo).
+// Devuelve la respuesta para el usuario, el resumen de cambios para el
+// registro y la respuesta cruda del modelo (para el historial).
+func ejecutarTurno(cliente *clienteIA, datos *almacen, historial []mensajeChat, mensaje string, ahora time.Time) (string, []string, string, error) {
 	agenda, err := datos.cargar()
 	if err != nil {
-		return "", nil, err
+		return "", nil, "", err
 	}
-	respuesta, err := cliente.completar(contextoTurno(agenda, ahora), mensaje)
+	respuesta, err := cliente.completar(contextoTurno(agenda, ahora), historial, mensaje)
 	if err != nil {
-		return "", nil, err
+		return "", nil, "", err
 	}
 	acciones, mensajeModelo, err := decodificarAcciones(respuesta)
 	if err != nil {
-		return "", nil, err
+		return "", nil, "", err
 	}
 	mensajeModelo = strings.TrimSpace(mensajeModelo)
 	if len(acciones) == 0 {
 		// Consulta o pregunta de aclaración: nada que guardar.
 		if mensajeModelo != "" {
-			return mensajeModelo, nil, nil
+			return mensajeModelo, nil, respuesta, nil
 		}
-		return "", nil, BridgeError("el modelo respondió vacío; reintenta")
+		return "", nil, "", BridgeError("el modelo respondió vacío; reintenta")
 	}
 	var resumen []string
 	err = datos.modificar(func(fresca *Agenda) error {
@@ -87,13 +97,13 @@ func ejecutarTurno(cliente *clienteIA, datos *almacen, mensaje string, ahora tim
 		return nil
 	})
 	if err != nil && err != errSinCambios {
-		return "", resumen, err
+		return "", resumen, "", err
 	}
 	partes := resumen
 	if mensajeModelo != "" && err == nil {
 		partes = append([]string{mensajeModelo}, resumen...)
 	}
-	return strings.Join(partes, "\n"), resumen, nil
+	return strings.Join(partes, "\n"), resumen, respuesta, nil
 }
 
 // errSinCambios indica que ninguna acción fue válida: no se escribe a disco.

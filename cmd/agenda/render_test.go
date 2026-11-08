@@ -100,3 +100,23 @@ func TestPartirMensajesLargos(t *testing.T) {
 		t.Fatalf("texto corto alterado: %v", got)
 	}
 }
+
+func TestHoyMuestraTareasSinFecha(t *testing.T) {
+	agenda := agendaDePrueba()
+	agenda.Tareas = append(agenda.Tareas, Tarea{ID: "i8", Texto: "Leer libro de patrones", Estado: "pendiente", Origen: "ia"})
+	salida := renderDia(agenda, time.Date(2026, 11, 14, 19, 0, 0, 0, lima())) // sábado sin bloques propios
+	if !strings.Contains(salida, "Sin fecha") || !strings.Contains(salida, "Leer libro de patrones") {
+		t.Fatalf("la tarea sin fecha no aparece en /hoy: %s", salida)
+	}
+}
+
+func TestConfirmacionIncluyeFecha(t *testing.T) {
+	agenda := agendaDePrueba()
+	resumen, _ := aplicarAcciones(agenda, []map[string]any{
+		{"tipo": "agregar_tarea", "texto": "Con fecha", "fecha": "2026-11-09"},
+		{"tipo": "agregar_tarea", "texto": "Suelta"},
+	})
+	if !strings.Contains(resumen[0], "lunes 9 de noviembre") || !strings.Contains(resumen[1], "sin fecha") {
+		t.Fatalf("confirmación sin fecha legible: %v", resumen)
+	}
+}

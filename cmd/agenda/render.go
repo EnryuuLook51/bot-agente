@@ -57,7 +57,6 @@ func renderDia(agenda *Agenda, ahora time.Time) string {
 	lineas = append(lineas, titulo)
 	if len(bloques) == 0 && len(tareas) == 0 {
 		lineas = append(lineas, "Sin bloques ni tareas para hoy.")
-		return strings.Join(lineas, "\n")
 	}
 	for _, b := range bloques {
 		linea := "• " + b.Inicio + "–" + b.Fin + " " + b.Nombre
@@ -80,6 +79,16 @@ func renderDia(agenda *Agenda, ahora time.Time) string {
 	if len(sueltas) > 0 {
 		lineas = append(lineas, "Pendientes sin bloque:")
 		lineas = append(lineas, sueltas...)
+	}
+	var sinFecha []string
+	for _, t := range agenda.Tareas {
+		if t.Estado == "pendiente" && t.Fecha == "" && t.Bloque == "" {
+			sinFecha = append(sinFecha, "☐ "+t.Texto)
+		}
+	}
+	if len(sinFecha) > 0 {
+		lineas = append(lineas, "Sin fecha (dime para cuándo):")
+		lineas = append(lineas, sinFecha...)
 	}
 	return strings.Join(lineas, "\n")
 }

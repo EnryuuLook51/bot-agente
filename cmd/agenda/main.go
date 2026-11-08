@@ -133,13 +133,14 @@ func principal() int {
 }
 
 type botAgenda struct {
-	conf     configuracionBot
-	datos    *almacen
-	relay    *Relay
-	registro *registro
-	cliente  *clienteIA
-	estado   *estadoBot
-	trabajo  chan func() // turnos IA en serie
+	conf      configuracionBot
+	datos     *almacen
+	relay     *Relay
+	registro  *registro
+	cliente   *clienteIA
+	estado    *estadoBot
+	trabajo   chan func()   // turnos IA en serie
+	historial []intercambio // solo lo toca el worker
 }
 
 // worker ejecuta los turnos IA de a uno (respeta el límite por minuto de Groq).
@@ -211,7 +212,8 @@ func (b *botAgenda) responderRender(arma func(*Agenda, time.Time) string) {
 
 // turnoLibre corre la Función 2 (texto libre → cambios) y responde.
 func (b *botAgenda) turnoLibre(mensaje string) {
-	respuesta, cambios, err := ejecutarTurno(b.cliente, b.datos, mensaje, time.Now().In(lima()))
+	ahora := time.Now().In(lima())
+	respuesta, cambios, crudo, err := ejecutarTurno(b.cliente, b.datos, b.historialReciente(ahora), mensaje, ahora)
 	for _, c := range cambios {
 		if strings.HasPrefix(c, "✔") {
 			b.registro.anotar("cambio", c)
@@ -222,7 +224,41 @@ func (b *botAgenda) turnoLibre(mensaje string) {
 		_ = b.relay.send(err.Error())
 		return
 	}
+	b.recordar(ahora, mensaje, crudo)
 	_ = b.relay.send(respuesta)
+}
+
+// Historial corto de la conversación con la IA: los últimos intercambios de
+// los últimos 30 minutos, solo en memoria. Lo usa solo el worker (un hilo).
+const (
+	maxIntercambios   = 4
+	vigenciaHistorial = 30 * time.Minute
+)
+
+type intercambio struct {
+	cuando    time.Time
+	usuario   string
+	respuesta string // JSON crudo del modelo
+}
+
+func (b *botAgenda) recordar(ahora time.Time, usuario, respuesta string) {
+	if respuesta == "" {
+		return
+	}
+	b.historial = append(b.historial, intercambio{ahora, usuario, respuesta})
+	if len(b.historial) > maxIntercambios {
+		b.historial = b.historial[len(b.historial)-maxIntercambios:]
+	}
+}
+
+func (b *botAgenda) historialReciente(ahora time.Time) []mensajeChat {
+	var mensajes []mensajeChat
+	for _, i := range b.historial {
+		if ahora.Sub(i.cuando) <= vigenciaHistorial {
+			mensajes = append(mensajes, mensajeChat{"user", i.usuario}, mensajeChat{"assistant", i.respuesta})
+		}
+	}
+	return mensajes
 }
 
 // turnoSugerir corre la Función 1 (/sugerir).

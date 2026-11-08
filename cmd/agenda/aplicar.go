@@ -83,7 +83,7 @@ func agregarTarea(agenda *Agenda, accion map[string]any) (string, error) {
 		Bloque: cadenaDe(accion, "bloque"),
 		Origen: "ia",
 	})
-	return "nueva tarea: " + texto, nil
+	return "nueva tarea: " + texto + " (" + cuandoTarea(agenda, &agenda.Tareas[len(agenda.Tareas)-1]) + ")", nil
 }
 
 func completarTarea(agenda *Agenda, accion map[string]any) (string, error) {
@@ -201,6 +201,21 @@ func eliminarBloque(agenda *Agenda, accion map[string]any) (string, error) {
 		}
 	}
 	return "bloque eliminado: " + nombre, nil
+}
+
+// cuandoTarea describe la fecha y el bloque de una tarea en lenguaje natural.
+func cuandoTarea(agenda *Agenda, t *Tarea) string {
+	var partes []string
+	if t.Fecha != "" {
+		partes = append(partes, fechaLegible(t.Fecha))
+	}
+	if b := agenda.encontrarBloque(t.Bloque); b != nil {
+		partes = append(partes, b.Nombre)
+	}
+	if len(partes) == 0 {
+		return "sin fecha"
+	}
+	return strings.Join(partes, ", ")
 }
 
 // confirmado admite la bandera como bool JSON (true) o string ("true").
